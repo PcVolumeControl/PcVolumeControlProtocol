@@ -46,9 +46,13 @@ how later additions stay compatible within v8.
 ## Connection start
 
 1. The server sends `hello` as soon as the connection opens.
-2. The client sends its own `hello`. It must be the client's first message,
-   within 10 seconds.
+2. The client sends its own `hello`. It is required: it must be the client's
+   first message and arrive within 10 seconds, or the server closes the
+   connection with the error `timeout`.
 3. The server sends `state`, then `update` messages as things change.
+
+The server sends no state before the client's `hello`, because that message
+says which version the client speaks and which parts of the state it wants.
 
 ```json
 {"type":"hello","protocolVersion":8,"applicationVersion":"v11","serverName":"wiglaf"}
@@ -235,6 +239,7 @@ What changes:
 | Code | Fatal | When |
 | --- | --- | --- |
 | `versionMismatch` | yes | The client's `hello` has another version. |
+| `timeout` | yes | No `hello` within 10 seconds of connecting. |
 | `malformed` | yes | Not JSON, not an object, a wrong type, or no `hello` first. |
 | `tooLarge` | yes | A client line over 64 KiB. |
 | `tooManyIcons` | yes | More than 32 ids in one command, or more than 64 outstanding. |
@@ -247,6 +252,27 @@ the client keeps its state as it is: its optimistic change was not applied,
 and no update will arrive to say so.
 
 In v7 the server closed the connection without a word for every one of these.
+
+## Keep-alive
+
+A phone that walks out of Wi-Fi range leaves a connection that looks open to
+the server, and a server that loses power looks the same to the phone. Either
+side can check:
+
+```json
+{"type":"ping"}
+{"type":"pong"}
+```
+
+- Whoever receives `ping` answers `pong` at once.
+- Any message counts as a sign of life, not only `pong`.
+- A side that has received nothing for 30 seconds sends `ping`. If nothing
+  arrives in the next 10 seconds it treats the connection as lost: the server
+  closes it and forgets the client, and a client reconnects.
+
+Answering `ping` is required of every client, including one that asked for
+nothing but the master volume. Sending it is optional for clients that have
+their own way of noticing a lost network.
 
 ## Discovery
 
@@ -282,17 +308,12 @@ server released and checked on Windows before v8 apps reach the stores.
 
 ## Open questions
 
-1. **Client `hello`.** It costs a message and buys a clean version error and
-   client names. The alternative is that the server sends `hello` and `state`
-   at once and trusts the client to disconnect on a mismatch.
-2. **Acknowledging commands.** No reply on success keeps the protocol small.
+1. **Acknowledging commands.** No reply on success keeps the protocol small.
    An `ok` with `re` would let a client clear a spinner without matching the
    command to an update.
-3. **Session order.** Added sessions go to the end and nothing ever reorders.
+2. **Session order.** Added sessions go to the end and nothing ever reorders.
    Is that what every client wants, or should the server be able to send an
    order?
-4. **Keep-alive.** A phone that leaves Wi-Fi can leave a dead connection
-   behind. A `ping` and `pong` pair would let both sides notice.
-5. **One device or all.** The state still describes only the default
+3. **One device or all.** The state still describes only the default
    device's sessions, as v7 did. Describing every device would be a larger
    change to every client.
