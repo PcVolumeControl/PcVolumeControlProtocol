@@ -7,7 +7,7 @@ each message is a single line ended by `\n`.
 | File | Direction | What it is |
 | --- | --- | --- |
 | `full-state-v7.json` | server to client | A full state from a server with no extensions. |
-| `full-state-v8.json` | server to client | A full state with `features`, `iconId` and `detail`. |
+| `full-state-v8.json` | server to client | A full state with `features` (`icons`), `iconId` and `detail`. |
 | `update-default-device.json` | client to server | Change the default device. |
 | `update-master.json` | client to server | Change the master volume and mute. |
 | `update-session.json` | client to server | Change one session's volume and mute. |

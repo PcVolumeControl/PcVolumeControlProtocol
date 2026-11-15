@@ -20,10 +20,10 @@ their own repositories and follow what is written here.
   master volume and mute, or a session's volume and mute.
 - Servers advertise `_pcvolumecontrol._tcp` over mDNS.
 - The version on the wire is `7`. "Protocol v8" is a set of optional,
-  additive extensions to v7, detected through feature names: application
-  icons (`icons`) and per-session details such as a browser tab's title
-  (`detail`). A v7 client and a v8 server, or the reverse, keep working
-  together.
+  additive extensions to v7: application icons, announced by the `icons`
+  feature name, and an optional `detail` on each session, such as a browser
+  tab's title, which clients show when present. A v7 client and a v8
+  server, or the reverse, keep working together.
 
 ## Implementations
 
@@ -45,9 +45,11 @@ these rules:
 - **Additive only.** New optional fields on existing objects, new message
   types, new feature names. Never change the meaning or type of an existing
   field, and never make an optional field required.
-- **The wire version stays 7.** New behaviour is announced by a feature name
-  in `features`, not by a new number.
-- **A server with an extension turned off sends exactly the v7 bytes.**
+- **The wire version stays 7.** Behaviour a client must detect before using
+  it, such as a server that answers a new request, is announced by a feature
+  name in `features`, not by a new number. A plain optional field needs no
+  feature name: clients use it when present and ignore it otherwise.
+- **A server with its extensions turned off sends exactly the v7 bytes.**
 - **New server-to-client message types go only to clients that asked for
   them.** Older clients parse every line as a full state.
 - **Clients ignore what they do not know:** fields, feature names and line

@@ -4,14 +4,16 @@ Newest first. Dates are when the change landed in the reference server.
 
 ## v8 extensions (2026-11)
 
-Optional and additive. The version on the wire stays `7`; support is announced
-through `features` in the full state and the `features` mDNS TXT record.
+Optional and additive. The version on the wire stays `7`. Behaviour a client
+must detect is announced through `features` in the full state and the
+`features` mDNS TXT record.
 
-- **`icons`**: sessions may carry an `iconId`. Clients fetch the image with an
-  `iconRequest` message and receive `icon` reply lines. Ids are derived from
-  the image content, so clients can cache by id indefinitely.
-- **`detail`**: sessions may carry a `detail`, a short label that tells apart
-  sessions of the same application, such as a browser tab's title.
+- **`icons`** feature: sessions may carry an `iconId`. Clients fetch the image
+  with an `iconRequest` message and receive `icon` reply lines. Ids are
+  derived from the image content, so clients can cache by id indefinitely.
+- Sessions may carry a `detail`, a short label that tells apart sessions of
+  the same application, such as a browser tab's title. It is an ordinary
+  optional member with no feature name: clients show it when present.
 - A line from the server is now either a full state (`defaultDevice`) or an
   icon reply (`icon`). Icon replies go only to the client that asked.
 

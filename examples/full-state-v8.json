@@ -2,8 +2,7 @@
   "protocolVersion": 7,
   "applicationVersion": "v10",
   "features": [
-    "icons",
-    "detail"
+    "icons"
   ],
   "deviceIds": {
     "0f4090a9-dee2-4563-ba29-0ad6b93d9e22": "Speakers (Mock Audio)",
