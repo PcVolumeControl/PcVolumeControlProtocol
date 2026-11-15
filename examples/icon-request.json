@@ -1,0 +1,10 @@
+{
+  "protocolVersion": 7,
+  "iconRequest": {
+    "ids": [
+      "demo1d94c5a",
+      "nosuchicon"
+    ],
+    "size": 16
+  }
+}

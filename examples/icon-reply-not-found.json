@@ -1,0 +1,7 @@
+{
+  "protocolVersion": 7,
+  "icon": {
+    "id": "nosuchicon",
+    "error": "notFound"
+  }
+}
