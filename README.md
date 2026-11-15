@@ -10,6 +10,8 @@ their own repositories and follow what is written here.
 - **[examples/](examples/)**: messages captured from a running server, usable
   as test fixtures.
 - **[CHANGELOG.md](CHANGELOG.md)**: what each protocol version added.
+- **[proposals/](proposals/)**: drafts of changes that are not part of the
+  protocol yet.
 
 ## At a glance
 

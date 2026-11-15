@@ -1,0 +1,266 @@
+# Proposal: v8 as a breaking version with differential updates
+
+Status: draft for discussion. Nothing here is implemented.
+
+The v8 extensions described in [PROTOCOL.md](../PROTOCOL.md) (icons and
+session details) were designed to keep working with v7 apps and servers. No
+app or server that speaks them has been released. This proposal uses that
+freedom: v8 becomes a version of its own that does not talk to v7, and it
+sends changes instead of the whole state.
+
+It stays newline-delimited JSON over TCP. Binary framing and pairing are a
+separate step, in [v9.md](v9.md).
+
+## Goals
+
+- One version number that means what it says: `8` on the wire and in mDNS.
+- The server sends what changed, not every device and session each time.
+- Clients send commands that say what they want, instead of partial states
+  with precedence rules.
+- A client that does something wrong is told why.
+- Drop everything that only existed to keep v7 clients working.
+
+## What v7 clients and servers do with v8
+
+There is no migration path. A v8 side and a v7 side do not interoperate; the
+user updates both.
+
+- **Released Android app, v8 server:** it parses the first line, sees a
+  `protocolVersion` other than 7, shows its "wrong version" message and
+  disconnects.
+- **Released iOS app, v8 server:** it does not check the version. The first
+  line fails to decode as a full state and the app reports a connection
+  failure, with no hint about updating.
+- **v8 app, v7 server:** the first line it receives is a v7 full state with
+  `protocolVersion` 7. The app tells the user to update the server.
+
+## Framing
+
+Unchanged: raw TCP, default port 3000, one JSON object per line, UTF-8, ended
+by `\n`. A trailing `\r` is tolerated and blank lines are ignored.
+
+Every message is an object with a `type` string. Both sides ignore members
+they do not know, and ignore messages whose `type` they do not know. That is
+how later additions stay compatible within v8.
+
+## Connection start
+
+1. The server sends `hello` as soon as the connection opens.
+2. The client sends its own `hello`. It must be the client's first message,
+   within 10 seconds.
+3. The server sends `state`, then `update` messages as things change.
+
+```json
+{"type":"hello","protocolVersion":8,"applicationVersion":"v11","serverName":"wiglaf"}
+{"type":"hello","protocolVersion":8,"clientName":"PcVolumeControl for Android 5.0"}
+```
+
+`protocolVersion` appears only in the two `hello` messages. If the versions
+differ, the server sends an `error` with code `versionMismatch` and closes; a
+client that reads a server `hello` with another version closes and tells the
+user which side is older.
+
+`serverName` and `clientName` are for display: the app can show which PC it
+reached, and the server can list who is connected.
+
+## State
+
+The full state, sent once after the handshake and again after `resync`:
+
+```json
+{
+  "type": "state",
+  "rev": 41,
+  "devices": [
+    {"id": "alsa_output.usb-headset", "name": "Headset"},
+    {"id": "alsa_output.pci-analog", "name": "Speakers"}
+  ],
+  "defaultDeviceId": "alsa_output.pci-analog",
+  "master": {"volume": 80.0, "muted": false},
+  "sessions": [
+    {"id": "s-95", "name": "Firefox", "volume": 100.0, "muted": false,
+     "iconId": "4b13f0d55a3779a6ff892414f951be3f", "detail": "Big Buck Bunny - YouTube"},
+    {"id": "s-127", "name": "Spotify", "volume": 65.0, "muted": false}
+  ]
+}
+```
+
+| Member | Type | Notes |
+| --- | --- | --- |
+| `rev` | integer | Revision of this state. See [Revisions](#revisions). |
+| `devices` | array | Active playback devices, in the server's order. |
+| `defaultDeviceId` | string or null | `null` when there is no playback device. |
+| `master` | object or null | Volume (0.0 to 100.0) and mute of the default device. `null` when there is none. |
+| `sessions` | array | Sessions on the default device, in the server's order. |
+| `sessions[].iconId` | string | Optional. As in [PROTOCOL.md](../PROTOCOL.md#icon-ids). |
+| `sessions[].detail` | string | Optional. As in [PROTOCOL.md](../PROTOCOL.md#session-details). |
+
+Changes from v7: `deviceIds` (a map) becomes `devices` (an ordered array);
+the default device's id, volume and mute are top-level; a server with no
+playback device says so instead of staying silent. Device and session ids are
+opaque: the v7 rule that a session id contains its device id is gone.
+
+## Updates
+
+After the first `state`, the server sends only what changed:
+
+```json
+{"type":"update","rev":42,"master":{"volume":41.0}}
+{"type":"update","rev":43,"sessions":{"changed":[{"id":"s-95","detail":"Sintel - YouTube"}]}}
+{"type":"update","rev":44,"sessions":{"changed":[{"id":"s-127","muted":true}],"removed":["s-95"]}}
+{"type":"update","rev":45,"sessions":{"added":[{"id":"s-140","name":"Discord","volume":90.0,"muted":false}]}}
+{"type":"update","rev":46,"devices":[{"id":"alsa_output.pci-analog","name":"Speakers"}]}
+{"type":"update","rev":47,"defaultDeviceId":"alsa_output.usb-headset","master":{"volume":55.0,"muted":false},"sessions":{"reset":[]}}
+```
+
+Every member except `type` and `rev` is optional, and an absent member means
+"unchanged".
+
+| Member | Meaning |
+| --- | --- |
+| `master` | The members present replace the client's values. |
+| `devices` | The whole device list, when it changed. It is short, so it is never patched. |
+| `defaultDeviceId` | The new default device. The same update carries a full `master` and `sessions.reset`. |
+| `sessions.removed` | Ids of sessions that ended. |
+| `sessions.changed` | Objects with an `id` and the members that changed. A member set to `null` is removed (`detail`, `iconId`). |
+| `sessions.added` | Complete session objects, appended to the list in the order given. |
+| `sessions.reset` | A complete session list that replaces the client's. Never combined with the other three. |
+
+A client applies one update in this order: `devices`, `defaultDeviceId`,
+`master`, then `sessions.reset`, or else `sessions.removed`, `changed`,
+`added`.
+
+The server gathers changes that arrive close together (a few tens of
+milliseconds) into one update. A change in `detail` alone is sent no sooner
+than one second after the previous update to that client, as today.
+
+An entry in `changed` for an id the client does not have, or an entry in
+`added` for one it already has, means the client's copy is wrong: it asks for
+a `resync`.
+
+### Revisions
+
+`rev` starts at any value in `state` and each `update` on that connection is
+exactly one higher. Over TCP nothing is lost or reordered, so a gap can only
+come from a bug on one side. A client that sees a gap sends `resync` and the
+server answers with a fresh `state`. That is cheap insurance, and it gives
+logs on both sides a common reference.
+
+## Commands
+
+Client to server. Each says one thing:
+
+```json
+{"type":"setMaster","volume":64.0}
+{"type":"setMaster","muted":true}
+{"type":"setSession","id":"s-127","volume":29.0}
+{"type":"setSession","id":"s-127","muted":true,"seq":17}
+{"type":"setDefaultDevice","deviceId":"alsa_output.usb-headset"}
+{"type":"getIcons","ids":["4b13f0d55a3779a6ff892414f951be3f"],"size":96}
+{"type":"resync"}
+```
+
+- `setMaster` and `setSession` take `volume`, `muted` or both. Changing one no
+  longer requires sending the other, which removes the race where a volume
+  drag on one client overwrote a mute from another.
+- Volumes outside 0 to 100 are clamped.
+- There is no reply to a command that worked. The change comes back to every
+  client, the sender included, as an `update`. A command that changes nothing
+  (the value is already set) produces nothing.
+- `seq` is optional on any command: a number the client chooses. An `error`
+  about that command carries it back as `re`.
+
+This replaces the v7 rule that a client message is a partial state checked in
+a fixed order (device, then master, then sessions), along with the habit it
+forced on clients of echoing back values they had not changed.
+
+## Icons
+
+The model is unchanged from [PROTOCOL.md](../PROTOCOL.md#icon-ids): ids are
+derived from the image, clients cache by id and request only what they lack.
+What changes:
+
+- The request is the `getIcons` command above. At most 32 ids per command and
+  64 outstanding per connection.
+- Every v8 server answers `getIcons`. There is no `features` member and no
+  feature name to check; a server with no icons answers `notFound`.
+- Replies are typed, and still go only to the client that asked:
+
+```json
+{"type":"icon","id":"4b13f0d55a3779a6ff892414f951be3f","size":96,"mime":"image/png","data":"iVBORw0KGgo..."}
+{"type":"icon","id":"nosuchicon","error":"notFound"}
+```
+
+## Errors
+
+```json
+{"type":"error","code":"unknownSession","message":"no session s-95","re":17}
+{"type":"error","code":"malformed","message":"line 3: volume must be a number","fatal":true}
+```
+
+| Code | Fatal | When |
+| --- | --- | --- |
+| `versionMismatch` | yes | The client's `hello` has another version. |
+| `malformed` | yes | Not JSON, not an object, a wrong type, or no `hello` first. |
+| `tooLarge` | yes | A client line over 64 KiB. |
+| `tooManyIcons` | yes | More than 32 ids in one command, or more than 64 outstanding. |
+| `unknownSession` | no | `setSession` for a session that is gone. |
+| `unknownDevice` | no | `setDefaultDevice` for a device that is gone. |
+| `notSettable` | no | The audio system refused the change. |
+
+After a fatal error the server closes the connection. After any other error
+the client keeps its state as it is: its optimistic change was not applied,
+and no update will arrive to say so.
+
+In v7 the server closed the connection without a word for every one of these.
+
+## Discovery
+
+`_pcvolumecontrol._tcp` as today, with TXT `protocol=8` and `version=1`. The
+`features` record is gone.
+
+## What is removed from v7 and the current v8
+
+- `protocolVersion` in every message, and the pretence that v8 is version 7.
+- The `features` array and TXT record, and the rule that a server with
+  extensions off sends the exact v7 bytes.
+- Partial-state client messages and their precedence rules.
+- Telling server lines apart by which key they contain: `type` says it.
+- The `deviceIds` map and the nested `defaultDevice` object.
+- The rule that a session id contains its device id.
+- Silent disconnects.
+
+## What it costs to build
+
+Nothing below has shipped, so all of it can change together.
+
+| Where | Work |
+| --- | --- |
+| PcVolumeControlServer | New wire models and parser; the broadcaster computes one update per change and keeps a revision; commands map straight onto the audio backend; error replies. The audio backends, the desktop app and icon resolution are unaffected. |
+| PcVolumeControlAndroid (open PR) | Replace the line classifier and Gson state model with typed messages and a state store that applies updates; commands replace the partial-state writers. Icon cache, request planning and rows stay. |
+| PcVolumeControliOS (draft PR) | The same swap in the repository and view model. Icon cache, planner and views stay. |
+| KMP client | The same swap in its protocol module. |
+| Python CLI, ESP32 | Rewrite their small protocol code, or leave them on v7 with an old server. |
+| This repository | PROTOCOL.md rewritten for v8, new examples. |
+
+Because new apps will not talk to the C# server, Windows users need the Rust
+server released and checked on Windows before v8 apps reach the stores.
+
+## Open questions
+
+1. **Client `hello`.** It costs a message and buys a clean version error and
+   client names. The alternative is that the server sends `hello` and `state`
+   at once and trusts the client to disconnect on a mismatch.
+2. **Acknowledging commands.** No reply on success keeps the protocol small.
+   An `ok` with `re` would let a client clear a spinner without matching the
+   command to an update.
+3. **Session order.** Added sessions go to the end and nothing ever reorders.
+   Is that what every client wants, or should the server be able to send an
+   order?
+4. **Asking for less.** A small client (the ESP32 one) may want no icon ids
+   and no details. That could be a member of the client's `hello`.
+5. **Keep-alive.** A phone that leaves Wi-Fi can leave a dead connection
+   behind. A `ping` and `pong` pair would let both sides notice.
+6. **One device or all.** The state still describes only the default
+   device's sessions, as v7 did. Describing every device would be a larger
+   change to every client.
