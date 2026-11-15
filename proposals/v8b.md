@@ -1,6 +1,8 @@
-# Proposal: v8 as a breaking version with differential updates
+# Proposal: v8b, a reworked protocol with differential updates
 
-Status: draft for discussion. Nothing here is implemented.
+Status: draft, set aside for now. Nothing here is implemented. It was written
+as a rework of v8 and is kept as "v8b": the fuller redesign, to revisit if
+the simpler protocol stops being enough.
 
 The v8 extensions described in [PROTOCOL.md](../PROTOCOL.md) (icons and
 session details) were designed to keep working with v7 apps and servers. No
