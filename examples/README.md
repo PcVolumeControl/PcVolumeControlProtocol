@@ -6,8 +6,7 @@ each message is a single line ended by `\n`.
 
 | File | Direction | What it is |
 | --- | --- | --- |
-| `full-state-v7.json` | server to client | A full state from a server with no extensions. |
-| `full-state-v8.json` | server to client | A full state with `features` (`icons`), `iconId` and `detail`. |
+| `full-state.json` | server to client | A full state, with `iconId` on every session and `detail` on two of them. |
 | `update-default-device.json` | client to server | Change the default device. |
 | `update-master.json` | client to server | Change the master volume and mute. |
 | `update-session.json` | client to server | Change one session's volume and mute. |
@@ -15,6 +14,11 @@ each message is a single line ended by `\n`.
 | `icon-reply.json` | server to client | The reply carrying a PNG. |
 | `icon-reply-not-found.json` | server to client | The reply for the unknown id. |
 
+There is one full state shape. A server that serves no icons sends the same
+state without any `iconId`, and answers every requested id like
+`icon-reply-not-found.json`. A server set not to send details leaves out
+`detail`.
+
 The ids in the update examples refer to the devices and sessions in
-`full-state-v7.json`. The icon ids of the mock server start with `demo`; a
-real server derives them from a hash of the image.
+`full-state.json`. Session ids are opaque. The icon ids of the mock server
+start with `demo`; a real server derives them from a hash of the image.
