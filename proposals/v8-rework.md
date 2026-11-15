@@ -123,9 +123,14 @@ The full state, sent once after the handshake and again after `resync`:
 | `devices` | array | Active playback devices, in the server's order. |
 | `defaultDeviceId` | string or null | `null` when there is no playback device. |
 | `master` | object or null | Volume (0.0 to 100.0) and mute of the default device. `null` when there is none. |
-| `sessions` | array | Sessions on the default device, in the server's order. |
+| `sessions` | array | Sessions on the default device only, in the server's order. |
 | `sessions[].iconId` | string | Optional. As in [PROTOCOL.md](../PROTOCOL.md#icon-ids). |
 | `sessions[].detail` | string | Optional. As in [PROTOCOL.md](../PROTOCOL.md#session-details). |
+
+The state describes one device: the PC's default playback device. That
+device is shared, not chosen per client. `setDefaultDevice` changes the PC's
+default for everyone, and every client then receives that device's master
+volume and sessions.
 
 Changes from v7: `deviceIds` (a map) becomes `devices` (an ordered array);
 the default device's id, volume and mute are top-level; a server with no
@@ -161,7 +166,7 @@ Every member except `type` and `rev` is optional, and an absent member means
 | `defaultDeviceId` | The new default device. The same update carries a full `master` and `sessions.reset`. |
 | `sessions.removed` | Ids of sessions that ended. |
 | `sessions.changed` | Objects with an `id` and the members that changed. A member set to `null` is removed (`detail`, `iconId`). |
-| `sessions.added` | Complete session objects, appended to the list in the order given. |
+| `sessions.added` | Complete session objects, appended to the end of the list in the order given. Nothing else changes the order: there is no reordering of existing sessions. |
 | `sessions.reset` | A complete session list that replaces the client's. Never combined with the other three. |
 
 A client applies one update in this order: `devices`, `defaultDeviceId`,
@@ -202,11 +207,24 @@ Client to server. Each says one thing:
   longer requires sending the other, which removes the race where a volume
   drag on one client overwrote a mute from another.
 - Volumes outside 0 to 100 are clamped.
-- There is no reply to a command that worked. The change comes back to every
-  client, the sender included, as an `update`. A command that changes nothing
-  (the value is already set) produces nothing.
-- `seq` is optional on any command: a number the client chooses. An `error`
-  about that command carries it back as `re`.
+- The change itself comes back to every client, the sender included, as an
+  `update`. A command that changes nothing (the value is already set)
+  produces no update.
+- `seq` is optional on any command: a number the client chooses. A command
+  that carries one gets exactly one reply naming it in `re`: `ok`, or an
+  `error`.
+
+```json
+{"type":"ok","re":17}
+```
+
+`ok` means the server accepted the command and the audio system took the
+change, or, for `getIcons` and `resync`, that the request was accepted and
+its messages follow. It says nothing about ordering: the `update` describing
+the change usually arrives just after the `ok`, and a client must not depend
+on which comes first. A command without `seq` gets no `ok`, which suits a
+client sending many values during a slider drag: it can leave `seq` off those
+and put one on the value the drag ends with.
 
 This replaces the v7 rule that a client message is a partial state checked in
 a fixed order (device, then master, then sessions), along with the habit it
@@ -306,14 +324,8 @@ Nothing below has shipped, so all of it can change together.
 Because new apps will not talk to the C# server, Windows users need the Rust
 server released and checked on Windows before v8 apps reach the stores.
 
-## Open questions
+## Left for a later version
 
-1. **Acknowledging commands.** No reply on success keeps the protocol small.
-   An `ok` with `re` would let a client clear a spinner without matching the
-   command to an update.
-2. **Session order.** Added sessions go to the end and nothing ever reorders.
-   Is that what every client wants, or should the server be able to send an
-   order?
-3. **One device or all.** The state still describes only the default
-   device's sessions, as v7 did. Describing every device would be a larger
-   change to every client.
+- **Sessions on every device.** The state covers the default device only, as
+  in v7. Describing all devices at once would change each client's screens,
+  not only its protocol code.
