@@ -63,6 +63,34 @@ user which side is older.
 `serverName` and `clientName` are for display: the app can show which PC it
 reached, and the server can list who is connected.
 
+### Asking for less
+
+A client's `hello` may carry `want`, a list of the parts of the state it has
+a use for. Without it the client gets everything.
+
+```json
+{"type":"hello","protocolVersion":8,"clientName":"Desk knob","want":[]}
+{"type":"hello","protocolVersion":8,"clientName":"Small display","want":["sessions"]}
+```
+
+| Part | Leaving it out means |
+| --- | --- |
+| `sessions` | `sessions` is always an empty array, and no update is sent for a session change. |
+| `devices` | `devices` is always an empty array. `defaultDeviceId` and `master` are still sent. |
+| `icons` | Sessions never carry `iconId`, and no update is sent when one becomes known. |
+| `details` | Sessions never carry `detail`, and no update is sent when only a detail changes. |
+
+`defaultDeviceId` and `master` are always sent. A client that wants only
+those, such as a hardware volume knob, sends an empty list: it receives one
+small `state` and after that a message only when the master volume, the mute
+or the default device changes.
+
+The point is less the bytes than the wake-ups: a tab title can change once a
+second, and a client with nowhere to show it should not have to read and
+parse a message each time. Unknown names in `want` are ignored. Commands are
+not restricted by it: a client that left out `sessions` may still send
+`setSession` if it knows an id.
+
 ## State
 
 The full state, sent once after the handshake and again after `resync`:
@@ -99,6 +127,12 @@ Changes from v7: `deviceIds` (a map) becomes `devices` (an ordered array);
 the default device's id, volume and mute are top-level; a server with no
 playback device says so instead of staying silent. Device and session ids are
 opaque: the v7 rule that a session id contains its device id is gone.
+
+That frees the server to hand out short session ids of its own, such as
+`s-95`, and map them to whatever the audio system uses. On Windows the
+native id is about 200 characters, and ids are stored by clients and sent
+back in commands, so this matters most to small clients. A session id means
+nothing outside the connection it was received on.
 
 ## Updates
 
@@ -236,7 +270,7 @@ Nothing below has shipped, so all of it can change together.
 
 | Where | Work |
 | --- | --- |
-| PcVolumeControlServer | New wire models and parser; the broadcaster computes one update per change and keeps a revision; commands map straight onto the audio backend; error replies. The audio backends, the desktop app and icon resolution are unaffected. |
+| PcVolumeControlServer | New wire models and parser; the broadcaster computes one update per change and keeps a revision; commands map straight onto the audio backend; error replies; one update per distinct `want` list; short session ids mapped to the backend's. The audio backends, the desktop app and icon resolution are unaffected. |
 | PcVolumeControlAndroid (open PR) | Replace the line classifier and Gson state model with typed messages and a state store that applies updates; commands replace the partial-state writers. Icon cache, request planning and rows stay. |
 | PcVolumeControliOS (draft PR) | The same swap in the repository and view model. Icon cache, planner and views stay. |
 | KMP client | The same swap in its protocol module. |
@@ -257,10 +291,8 @@ server released and checked on Windows before v8 apps reach the stores.
 3. **Session order.** Added sessions go to the end and nothing ever reorders.
    Is that what every client wants, or should the server be able to send an
    order?
-4. **Asking for less.** A small client (the ESP32 one) may want no icon ids
-   and no details. That could be a member of the client's `hello`.
-5. **Keep-alive.** A phone that leaves Wi-Fi can leave a dead connection
+4. **Keep-alive.** A phone that leaves Wi-Fi can leave a dead connection
    behind. A `ping` and `pong` pair would let both sides notice.
-6. **One device or all.** The state still describes only the default
+5. **One device or all.** The state still describes only the default
    device's sessions, as v7 did. Describing every device would be a larger
    change to every client.
