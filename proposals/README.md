@@ -1,7 +1,7 @@
 # Proposals
 
-Drafts under discussion. Nothing in this folder is part of the protocol, and
-no implementation should follow it until it has been merged into
+Drafts kept for reference. Nothing in this folder is part of the protocol,
+and no implementation should follow it unless it is adopted into
 [PROTOCOL.md](../PROTOCOL.md).
 
 | Proposal | What it changes |

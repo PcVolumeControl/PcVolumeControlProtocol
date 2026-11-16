@@ -1,14 +1,16 @@
 # Proposal: v8b, a reworked protocol with differential updates
 
-Status: draft, set aside for now. Nothing here is implemented. It was written
-as a rework of v8 and is kept as "v8b": the fuller redesign, to revisit if
-the simpler protocol stops being enough.
+Status: draft, set aside. Nothing here is implemented.
 
-The v8 extensions described in [PROTOCOL.md](../PROTOCOL.md) (icons and
-session details) were designed to keep working with v7 apps and servers. No
-app or server that speaks them has been released. This proposal uses that
-freedom: v8 becomes a version of its own that does not talk to v7, and it
-sends changes instead of the whole state.
+Version 8, as described in [PROTOCOL.md](../PROTOCOL.md), keeps the message
+design of version 7: the server sends the whole state on every change and
+clients send partial states. This proposal is the fuller redesign that was
+considered alongside it: typed messages, a handshake, explicit commands, and
+updates that carry only what changed. It was judged more than the protocol
+needs for now and is kept for reference. If it is ever adopted it will need a
+version number of its own, since it does not interoperate with version 8;
+where the text below says "v8" for its own messages, read it as that future
+version.
 
 It stays newline-delimited JSON over TCP. Binary framing and pairing are a
 separate step, in [v9.md](v9.md).
@@ -240,8 +242,8 @@ What changes:
 
 - The request is the `getIcons` command above. At most 32 ids per command and
   64 outstanding per connection.
-- Every v8 server answers `getIcons`. There is no `features` member and no
-  feature name to check; a server with no icons answers `notFound`.
+- Every server answers `getIcons`; a server with no icons answers
+  `notFound`.
 - Replies are typed, and still go only to the client that asked:
 
 ```json
@@ -296,14 +298,12 @@ their own way of noticing a lost network.
 
 ## Discovery
 
-`_pcvolumecontrol._tcp` as today, with TXT `protocol=8` and `version=1`. The
-`features` record is gone.
+`_pcvolumecontrol._tcp` as today, with the new version number in the TXT
+`protocol` record.
 
-## What is removed from v7 and the current v8
+## What is removed compared with version 8
 
-- `protocolVersion` in every message, and the pretence that v8 is version 7.
-- The `features` array and TXT record, and the rule that a server with
-  extensions off sends the exact v7 bytes.
+- `protocolVersion` in every message.
 - Partial-state client messages and their precedence rules.
 - Telling server lines apart by which key they contain: `type` says it.
 - The `deviceIds` map and the nested `defaultDevice` object.
