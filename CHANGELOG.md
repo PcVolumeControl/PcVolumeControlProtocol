@@ -2,20 +2,24 @@
 
 Newest first. Dates are when the change landed in the reference server.
 
-## v8 extensions (2026-11)
+## v8 (2026-11)
 
-Optional and additive. The version on the wire stays `7`. Behaviour a client
-must detect is announced through `features` in the full state and the
-`features` mDNS TXT record.
+A breaking version: `protocolVersion` is `8` in every message and the mDNS
+`protocol` record is `8`. It does not interoperate with v7; each side
+disconnects on the other's version.
 
-- **`icons`** feature: sessions may carry an `iconId`. Clients fetch the image
-  with an `iconRequest` message and receive `icon` reply lines. Ids are
-  derived from the image content, so clients can cache by id indefinitely.
-- Sessions may carry a `detail`, a short label that tells apart sessions of
-  the same application, such as a browser tab's title. It is an ordinary
-  optional member with no feature name: clients show it when present.
-- A line from the server is now either a full state (`defaultDevice`) or an
-  icon reply (`icon`). Icon replies go only to the client that asked.
+- **Application icons.** Sessions may carry an `iconId`. Clients fetch the
+  image with an `iconRequest` message and receive `icon` reply lines, which
+  go only to the client that asked. Ids are derived from the image content,
+  so clients can cache by id indefinitely. Every server answers
+  `iconRequest`; one that serves no icons answers `notFound`.
+- **Session details.** Sessions may carry an optional `detail`, a short label
+  that tells apart sessions of the same application, such as a browser tab's
+  title.
+- A line from the server is either a full state (`defaultDevice`) or an icon
+  reply (`icon`).
+- **Session ids are opaque.** The rule that a session id contains its device
+  id is gone.
 
 ## mDNS discovery (2026-06)
 

@@ -1,11 +1,11 @@
 {
-  "protocolVersion": 7,
+  "protocolVersion": 8,
   "defaultDevice": {
     "deviceId": "0f4090a9-dee2-4563-ba29-0ad6b93d9e22",
     "sessions": [
       {
         "name": "Firefox",
-        "id": "0f4090a9-dee2-4563-ba29-0ad6b93d9e22|mock/firefox",
+        "id": "mock-9ff8bf89-firefox",
         "volume": 29.0,
         "muted": true
       }
